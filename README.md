@@ -1,145 +1,168 @@
 # atom-simulator
 
-Vollständige Wasserstofforbitale als goldene 3D-Punktwolken. Die Positionen werden
-aus der normierten Wahrscheinlichkeitsdichte der Wasserstoff-Wellenfunktion
-gezogen. Ein eigener OpenGL-Renderer stellt jede Probe als kleine beleuchtete
-Kugel dar, mit Tiefenverdeckung, Schatten und einer zuschaltbaren Schnittansicht.
+Vollständige Wasserstofforbitale, goldene 3D-Punktwolken und **Bohmscher Teilchenfluss**.
+Die sichtbare Dichte und die Bewegung werden im eigenen Physikkern berechnet.
+Der Renderer übernimmt ausschließlich Darstellung, Licht, Kamera und Ausschnitt.
 
-![Wasserstofforbital n=6, l=2, m=0 mit geometrischem Ausschnitt](docs/preview.png)
+![Goldene Orbitaldarstellung](docs/preview.png)
 
-**Version 0.1:** interaktiver Betrachter, PNG-Export und ruhiger MP4-Kameraflug.
-Standard: `n=6, l=2, m=0`, 450.000 Punkte, goldene Darstellung auf hellem Grund.
-Das Programm benötigt kein Manim, Blender oder separates FFmpeg-Programm.
+## Starten und einstellen
 
-## Starten
-
-Voraussetzungen: Python **3.11 oder neuer**, ein Desktop mit **OpenGL 3.3** und
-aktuelle Grafiktreiber. Der getestete Rechner verwendet Windows und eine
-NVIDIA RTX 4070 SUPER. Die wissenschaftlichen Tests benötigen keine Grafikkarte.
-
-Im Projektordner unter Windows/PowerShell:
+Unter Windows `Start.cmd` doppelt anklicken. Die bereits eingerichtete Python-Umgebung
+wird benutzt. Für eine frische Installation: Python 3.11 oder neuer und OpenGL 3.3.
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install -e ".[all]"
 .\.venv\Scripts\python.exe -m atom_simulator view
 ```
 
-Alternativ richtet `./Start.ps1` die Umgebung beim ersten Aufruf ein und öffnet
-den Betrachter. `./Start.ps1 render` exportiert die Standardvorschau.
+**Die festen Einstellungen stehen in [config.py](src/atom_simulator/config.py).**
+Dort lassen sich `N`, `L`, `M`, Punktzahl, Farben, Auflösung, Dauer und die vier
+Produktionsfälle direkt bearbeiten. Die Ausgangswerte sind ausdrücklich aufgeschrieben.
+Für einen anderen Zustand ist kein Umbau des Programms nötig.
 
-Unter macOS/Linux heißen die entsprechenden Aufrufe `.venv/bin/python`.
-Der interaktive Betrachter verwendet GLFW. Der Export erzeugt einen unsichtbaren
-OpenGL-Kontext; auf einem Linux-Server ohne Desktop ist dafür gegebenenfalls
-eine gesonderte EGL-/Xvfb-Einrichtung erforderlich. Dieser Serverbetrieb ist
-kein getesteter Bestandteil der ersten Version.
-
-## Bedienung
-
-| Eingabe | Wirkung |
+| Eingabe im Fenster | Wirkung |
 | --- | --- |
-| Linke Maustaste ziehen | Ansicht drehen |
-| Mausrad | Vergrößern/verkleinern |
-| `Leertaste` | Langsame Kameradrehung starten/stoppen |
-| `C` | Geometrischen Ausschnitt ein-/ausblenden |
-| `B` | Hellen oder schwarzen Hintergrund wählen |
-| `R` | Kamera zurücksetzen |
-| `1` / `2` / `3` / `4` | 1s / 2p mit m=0 / 3d mit m=0 / 6d mit m=0 |
-| `Esc` | Fenster schließen |
+| Maus ziehen / Mausrad | Ansicht drehen / zoomen |
+| Leertaste | Bohmschen Fluss pausieren / fortsetzen |
+| A | Langsame Kameradrehung ein-/ausschalten |
+| C | Geometrischen Ausschnitt umschalten |
+| F | Vorzeichen von m und damit Flussrichtung wechseln |
+| B | Heller / schwarzer Hintergrund |
+| R | Kamera und Zeit zurücksetzen |
+| 1 / 2 / 3 / 4 | Die vier unten aufgeführten Flussfälle |
+| Esc | Schließen |
 
-Beliebige zulässige Zustände bis `n=12` lassen sich beim Start wählen:
-
-```powershell
-.\.venv\Scripts\python.exe -m atom_simulator view --n 4 --l 3 --m 2
-```
-
-Jeder Zustand wird automatisch auf seinen eigenen Begrenzungsradius eingepasst.
-Die Bildschirmgrößen verschiedener Presets sind deshalb **kein gemeinsamer
-physikalischer Maßstab**. Die Koordinaten selbst behalten ihre Einheit `a_mu`;
-der Darstellungsmaßstab steht in den Exportmetadaten.
-
-## Bilder und Video
-
-20 Sekunden, 1920 × 1080, 30 Bilder/s, ohne Ton:
+Alternativ lassen sich Werte beim Start überschreiben:
 
 ```powershell
-.\.venv\Scripts\python.exe -m atom_simulator render --duration 20 --output outputs/orbital-preview.mp4
+.\.venv\Scripts\python.exe -m atom_simulator view --n 3 --l 2 --m 2 --time-rate 14
 ```
 
-Der Clip beginnt mit der vollständigen Wolke. Anschließend öffnet sich langsam
-ein 110°-Keil, während die Kamera einen kleinen Bogen beschreibt. Zum Schluss
-bleibt das Bild stehen. Der Zusatz **Schnittansicht** kennzeichnet die Ausblendung.
+Zulässig sind `1 <= n <= 12`, `0 <= l < n`, `-l <= m <= l`.
+Bei `m=0` stehen die Bohmschen Positionen in diesem spinlosen Eigenzustandsmodell still.
+Jedes Orbital wird auf seinen eigenen Radius eingepasst: Bildschirmgrößen verschiedener
+Zustände sind kein gemeinsamer physikalischer Größenmaßstab.
 
-Einzelbild und eine Variante ohne Schnitt:
+## Fertige Medien und erneutes Rendern
 
-```powershell
-.\.venv\Scripts\python.exe -m atom_simulator image --output outputs/orbital.png
-.\.venv\Scripts\python.exe -m atom_simulator render --no-cutaway --background black
-```
+Die lokalen Medien stehen unter `outputs/`; dieser große Ordner wird nicht zu GitHub hochgeladen.
 
-Wichtige Optionen: `--n`, `--l`, `--m`, `--points`, `--seed`, `--width`,
-`--height`, `--bead-radius`, `--background light|black`, `--no-labels`.
-Für Exporte kommt `--supersample 1|2|3` hinzu: Standard `2` rendert in doppelter
-Breite/Höhe und verkleinert das Bild für glatte Kanten. Bei schwächerer Hardware
-zunächst `--points 100000 --supersample 1 --width 1280 --height 720` verwenden.
-Alle Optionen stehen unter `python -m atom_simulator render --help`.
-
-Zu jedem PNG/MP4 entsteht eine JSON-Datei mit Quantenzahlen, Seed,
-Integrationsnormen, erfasster Wahrscheinlichkeit, Maßstab und Renderparametern.
-Videos entstehen zunächst als `*.partial.mp4`; erst nach erfolgreichem Encoding
-wird die endgültige Datei ersetzt. Große Exporte und die Python-Umgebung werden
-nicht in Git eingecheckt.
-
-## Physik und Abgrenzung
-
-Berechnet wird `psi_nlm = R_nl(r) * Y_lm(theta, phi)` mit vollständigem Radialteil
-und **komplexen** Kugelflächenfunktionen. Das Sampling berücksichtigt das
-Volumenelement: `r² |R|²`, die Verteilung in `cos(theta)` und einen gleichverteilten
-Azimut. Der numerische Grenzradius lässt eine Restwahrscheinlichkeit von `1e-8`
-außerhalb. Diese Grenze ist keine Atomoberfläche.
-
-Die Punkte sind mögliche Ortsmessergebnisse für **ein Elektron**. Ihre Positionen
-bleiben während des Clips fest. Bewegt werden Kamera und Schnittöffnung. Das
-Programm simuliert in dieser Version weder Elektronenbahnen noch Bohmsche
-Trajektorien. Gold und Licht kodieren auch kein Vorzeichen der Wellenfunktion.
-Eine Änderung von Punktgröße/Beleuchtung verändert die Darstellung, nicht die
-berechnete Verteilung.
-
-Die Optik orientiert sich an minutephysics' [A Better Way To Picture Atoms](https://www.youtube.com/watch?v=W2Xb2GFK2yc).
-Die dort erwähnten Bohmschen Trajektorien sind ein anderer Bewegungsmodus.
-Hier entstand eigener Python-/GLSL-Code; es wurden keine Videoframes übernommen.
-Herleitung, Einheiten, Knoten und Primärquellen stehen in [docs/physics.md](docs/physics.md).
-
-## Codeaufbau
-
-Der Code verwendet explizite Zwischenschritte, Typangaben und kleine Funktionen.
-Die Datenstrukturen beschreiben einen Zustand, eine Punktwolke und Renderoptionen.
-Die Python-Implementierung enthält keine verschachtelten Schleifen. NumPy/SciPy
-bearbeiten die Punktmengen als Arrays; die Grafikkarte zeichnet sie gesammelt.
-
-| Modul | Verantwortung |
+| Ordner / Datei | Inhalt |
 | --- | --- |
-| `physics.py` | Normierte Wellenfunktionen, Quantenzahlen, Knoten |
-| `sampling.py` | Getrennte inverse Verteilungsfunktionen und reproduzierbare Stichprobe |
-| `camera.py` | Projektionsmatrizen und ruhiger Kameraablauf |
-| `renderer.py`, `shaders.py` | GPU-Ressourcen, Kugelpunkte, Schatten, Beschriftung |
-| `viewer.py` | Fenster und Maus-/Tastatursteuerung |
-| `export.py` | PNG, H.264 und Metadaten |
-| `cli.py` | Eingabeprüfung und Programmeinstieg |
+| `outputs/Bilder_gesichert_2026-11-23/` | 13 unveränderte Ansichten des akzeptierten ersten Prototyps |
+| `outputs/Orbitalgalerie/index.html` | Offline-Galerie mit Filtern und Links zu 4K-Originalen |
+| `outputs/Orbitalgalerie/n_01/` bis `n_12/` | 728 PNGs: 364 verschiedene Dichten, jeweils voll / geschnitten |
+| `outputs/bohm_clips/01_2p_m_plus1.mp4` | n=2, l=1, m=+1 |
+| `outputs/bohm_clips/02_2p_m_minus1.mp4` | Gleiche Dichte, entgegengesetzter Fluss |
+| `outputs/bohm_clips/03_3d_m_plus2.mp4` | n=3, l=2, m=+2 |
+| `outputs/bohm_clips/04_6d_m_plus1.mp4` | n=6, l=2, m=+1, mit radialen Knoten |
+| `outputs/bohm_clips/Bohmscher_Fluss_Alle_Faelle.mp4` | Alle vier Fälle nacheinander, 88 Sekunden |
 
-## Prüfen und weiterentwickeln
+Jeder Einzelclip dauert 22 Sekunden und enthält drei ruhige Ansichten mit zwei
+weichen Kamerafahrten. Dazwischen bleibt die Kamera stehen, während die Punkte fließen.
+Ausgabe: 1920 × 1080, 30 Bilder/s, H.264, ohne Ton; intern doppelte Auflösung zur Kantenglättung.
+Die Einzelclips sind für den Schnitt gedacht; der Gesamtclip enthält dieselbe Reihenfolge.
+
+```powershell
+.\.venv\Scripts\python.exe -m atom_simulator clips
+.\.venv\Scripts\python.exe -m atom_simulator gallery
+```
+
+Eine kleine Galerie zum Testen: `gallery --max-n 3`. Die Galerie setzt einen abgebrochenen
+Lauf fort, wenn Bild, Metadaten und Thumbnail vollständig zur Konfiguration passen.
+Die beiden Vorzeichen von m haben dieselbe Dichte; die Galerie speichert daher m >= 0.
+
+Eigene Bilder und Clips:
+
+```powershell
+.\.venv\Scripts\python.exe -m atom_simulator image --n 6 --l 2 --m 0 --output outputs/6d.png
+.\.venv\Scripts\python.exe -m atom_simulator render --n 2 --l 1 --m 1 --duration 30 --output outputs/mein-fluss.mp4
+.\.venv\Scripts\python.exe -m atom_simulator render --motion camera --n 6 --l 2 --m 0 --output outputs/kamerafahrt.mp4
+```
+
+Weitere Optionen: `--no-cutaway`, `--background black`, `--no-labels`, `--points`,
+`--seed`, `--width`, `--height`, `--fps`, `--time-rate`, `--supersample 1|2|3`.
+Bei schwächerer Hardware helfen 100.000 Punkte, 1280 × 720 und Supersampling 1.
+Auf macOS/Linux lautet der Python-Pfad `.venv/bin/python`; ein Desktop-/GL-Kontext wird benötigt.
+
+## Ein expliziter Physikkern, wenige Abhängigkeiten
+
+**[physics.py](src/atom_simulator/physics.py)** enthält die gesamte Physik:
+
+- Quantenzahlen und Naturkonstanten;
+- eigene Rekursionen für Laguerre- und zugeordnete Legendre-Polynome;
+- normierte Radial- und Winkelwellenfunktionen;
+- Trapezintegration, kumulative Verteilungen und Punkt-Sampling;
+- Wahrscheinlichkeitsdichte, Bohmsches Geschwindigkeitsfeld und exakte Zeitentwicklung.
+
+Der Kern braucht nur **NumPy** als externes Paket. Es gibt keine SciPy-Abhängigkeit,
+keinen externen Differentialgleichungs-Solver und keine verschachtelten Python-Schleifen.
+Zwischenschritte und Datenstrukturen sind explizit und typisiert, damit die Berechnung
+später leicht nach C++ übertragen werden kann.
+
+Die Grundinstallation hat drei direkte Pakete: NumPy für Arrays, ModernGL für die
+Grafikkarte und Pillow für Bilder/Beschriftung. **PyAV ist nur für Videos nötig, GLFW
+nur für das Fenster.** `pip install -e .` installiert die Basis; `[video]`, `[viewer]`
+oder `[all]` ergänzen die benötigten Ein-/Ausgabefunktionen. ModernGL zieht seinen
+kleinen Kontextadapter `glcontext` automatisch hinzu.
+
+| Datei | Aufgabe |
+| --- | --- |
+| `physics.py` | Alle physikalischen Rechnungen einschließlich Sampling und Bohmfluss |
+| `config.py` | Feste, direkt bearbeitbare Szenenwerte und Fälle |
+| `camera.py` | Kamera und Übergangszeiten |
+| `renderer.py`, `shaders.py` | Zeichnen der vom Physikkern gelieferten Positionen |
+| `viewer.py` | Fenster und Eingaben |
+| `export.py`, `gallery.py` | Clips, Bilder, Metadaten und Übersicht |
+| `cli.py` | Programmeinstieg und Parameterprüfung |
+
+## Was genau bewegt sich?
+
+Für die komplexen Eigenzustände gilt `psi = R_nl * Y_lm`. In natürlichen Einheiten
+`r / a_mu` und `tau = t / t_mu` lautet das Bohmsche Feld
+
+$$
+\mathbf v=m\frac{(-y,x,0)}{x^2+y^2},\qquad
+\Delta\varphi=\frac{m\tau}{x^2+y^2}.
+$$
+
+Der Physikkern rotiert jede Anfangsposition mit ihrem eigenen berechneten Winkel.
+Radius und Höhe bleiben erhalten; es gibt keine Euler-Integrationsfehler und keine
+individuelle Geschwindigkeitsdeckelung. Ein einziger Zeitfaktor gilt pro Clip.
+2p mit m=+1 und m=-1 benutzt identische Anfangspunkte, Kamera und Zeitlupe.
+Die helleren Punkte sind ausgewählte Proben derselben Wolke; ihre kurzen Spuren folgen
+exakt derselben Gleichung und denselben Sichtbarkeitsregeln.
+
+Die Wolke beschreibt ein Ensemble möglicher Konfigurationen **eines Elektrons**.
+Bohmsche Trajektorien sind eine ausdrücklich gewählte Interpretation des
+Wahrscheinlichkeitsstroms. Das Modell ist nichtrelativistisch und spinlos; es stellt
+die Relativkoordinate dar. Die Schnittansicht entfernt einen geometrischen Keil aus
+der Anzeige und verändert die Wellenfunktion nicht. Gold, Licht und Kugelgröße sind
+Darstellungsmittel und keine lineare Dichteskala.
+
+Sehr nahe der Achse können Bahnen bei endlicher Bildrate zeitlich unterabgetastet
+sein. Exportmetadaten nennen Winkel pro Frame und betroffene Anteile. Die hervorgehobenen
+Proben werden aus zeitlich gut auflösbaren Bahnen ausgewählt; ihre Geschwindigkeiten
+werden nicht verändert. Die Zielrestwahrscheinlichkeit außerhalb des Radialgrenzwerts
+ist ungefähr `1e-8`, numerisch aus der Gitter-CDF bestimmt.
+
+Einheiten, Herleitung, Prüfungen und Primärquellen: [docs/physics.md](docs/physics.md).
+Die visuelle Referenz ist minutephysics' [A Better Way To Picture Atoms](https://www.youtube.com/watch?v=W2Xb2GFK2yc);
+Code und Bilder dieses Projekts sind eigenständig erstellt.
+
+## Prüfen
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe tools/verify_media.py
 ```
 
-Die Tests vergleichen unter anderem analytische 1s-/2p-Lösungen, Normierung,
-Momente, Radialknoten, Stichprobenverteilungen, alle unterstützten radialen und
-polaren Verteilungen, Kamerageometrie und Exportfehler. GitHub Actions führt
-dieselben CPU-Tests und die Codeprüfung unter Windows/Linux aus. Die eigentliche
-Grafikausgabe wird lokal mit einer OpenGL-Grafikkarte geprüft.
-
-Die für die erste Windows-Vorschau verwendeten Bibliotheksversionen stehen in
-`requirements-tested.txt`; die unterstützten Bereiche stehen in `pyproject.toml`.
+Die Tests laufen ohne SciPy. Sie prüfen analytische Referenzlösungen, Normierung,
+Knoten, Momente, Punktverteilungen und die Bohmsche Bewegung einschließlich Strom,
+Richtungsumkehr, Invarianten und stationärer Dichte. GitHub Actions führt die CPU-Tests
+unter Windows/Linux aus. Das Medienwerkzeug dekodiert sämtliche Bilder und Videoframes
+und prüft Galerieabdeckung, Indizes, Auflösungen, Laufzeiten und Zeitstempel.

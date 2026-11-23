@@ -143,3 +143,50 @@ void main() {
     color = texture(overlay_texture, vec2(uv.x, 1.0 - uv.y));
 }
 """
+
+TRACER_FRAGMENT = """
+#version 330
+uniform mat4 projection;
+uniform float bead_radius;
+in vec3 eye_center;
+in float visible;
+out vec4 color;
+void main() {
+    if (visible < 0.5) discard;
+    vec2 disk = gl_PointCoord * 2.0 - 1.0;
+    disk.y = -disk.y;
+    float distance_squared = dot(disk, disk);
+    if (distance_squared > 1.0) discard;
+    vec3 normal = vec3(disk, sqrt(1.0 - distance_squared));
+    vec3 surface = eye_center + normal * bead_radius;
+    vec4 clip = projection * vec4(surface, 1.0);
+    gl_FragDepth = 0.5 * (clip.z / clip.w) + 0.5;
+    float light = 0.55 + 0.45 * max(dot(normal, normalize(vec3(-0.5, 0.75, 1.3))), 0.0);
+    color = vec4(vec3(1.0, 0.94, 0.70) * light, 1.0);
+}
+"""
+
+TRAIL_VERTEX = """
+#version 330
+in vec3 in_position;
+uniform mat4 view;
+uniform mat4 projection;
+out vec3 world_position;
+void main() {
+    world_position = in_position;
+    gl_Position = projection * view * vec4(in_position, 1.0);
+}
+"""
+
+TRAIL_FRAGMENT = """
+#version 330
+uniform float cut_angle;
+in vec3 world_position;
+out vec4 color;
+void main() {
+    float angle = atan(world_position.y, world_position.x) - radians(45.0);
+    angle = atan(sin(angle), cos(angle));
+    if (cut_angle > 0.0001 && abs(angle) < 0.5 * cut_angle) discard;
+    color = vec4(1.0, 0.91, 0.56, 0.65);
+}
+"""

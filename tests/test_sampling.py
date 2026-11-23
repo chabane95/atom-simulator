@@ -2,25 +2,35 @@
 
 import json
 import unittest
+from collections.abc import Callable
 
 import numpy as np
-from scipy.special import gammainc, gammaincc
-from scipy.stats import kstest
 
-from atom_simulator.physics import QuantumNumbers
-from atom_simulator.sampling import RADIAL_TAIL_PROBABILITY, sample_orbital
+from atom_simulator.physics import RADIAL_TAIL_PROBABILITY, QuantumNumbers, sample_orbital
 
 
 def one_s_radial_cdf(radius: np.ndarray) -> np.ndarray:
-    return gammainc(3.0, 2.0 * radius)
+    return 1.0 - np.exp(-2.0 * radius) * (1.0 + 2.0 * radius + 2.0 * radius**2)
 
 
 def two_p_radial_cdf(radius: np.ndarray) -> np.ndarray:
-    return gammainc(5.0, radius)
+    polynomial = 1.0 + radius + radius**2 / 2.0 + radius**3 / 6.0 + radius**4 / 24.0
+    return 1.0 - np.exp(-radius) * polynomial
 
 
 def two_p_zero_polar_cdf(coordinate: np.ndarray) -> np.ndarray:
     return 0.5 * (1.0 + coordinate**3)
+
+
+def ks_distance(samples: np.ndarray, expected_cdf: Callable[[np.ndarray], np.ndarray]) -> float:
+    """Two-sided one-sample empirical CDF distance, without a statistics package."""
+    ordered = np.sort(samples)
+    expected = expected_cdf(ordered)
+    upper = np.arange(1, ordered.size + 1, dtype=np.float64) / ordered.size
+    lower = np.arange(ordered.size, dtype=np.float64) / ordered.size
+    largest_upper = float(np.max(upper - expected))
+    largest_lower = float(np.max(expected - lower))
+    return max(largest_upper, largest_lower)
 
 
 class SamplingTests(unittest.TestCase):
@@ -53,7 +63,7 @@ class SamplingTests(unittest.TestCase):
         self.assertAlmostEqual(float(np.mean(cos_theta**2)), 1.0 / 3.0, delta=0.004)
         self.assertAlmostEqual(float(np.mean(np.cos(phi))), 0.0, delta=0.008)
         self.assertAlmostEqual(float(np.mean(np.sin(phi))), 0.0, delta=0.008)
-        self.assertLess(float(kstest(radius, one_s_radial_cdf).statistic), 0.008)
+        self.assertLess(ks_distance(radius, one_s_radial_cdf), 0.008)
 
     def test_two_p_zero_radial_and_polar_cdfs(self) -> None:
         cloud = sample_orbital(QuantumNumbers(2, 1, 0), 100000, seed=41)
@@ -61,8 +71,8 @@ class SamplingTests(unittest.TestCase):
         cos_theta = cloud.positions[:, 2] / radius
         self.assertAlmostEqual(float(np.mean(radius)), 5.0, delta=0.035)
         self.assertAlmostEqual(float(np.mean(cos_theta**2)), 3.0 / 5.0, delta=0.005)
-        self.assertLess(float(kstest(radius, two_p_radial_cdf).statistic), 0.008)
-        self.assertLess(float(kstest(cos_theta, two_p_zero_polar_cdf).statistic), 0.008)
+        self.assertLess(ks_distance(radius, two_p_radial_cdf), 0.008)
+        self.assertLess(ks_distance(cos_theta, two_p_zero_polar_cdf), 0.008)
 
     def test_two_p_one_polar_moment(self) -> None:
         cloud = sample_orbital(QuantumNumbers(2, 1, 1), 80000, seed=51)
@@ -76,10 +86,13 @@ class SamplingTests(unittest.TestCase):
         self.assertAlmostEqual(float(np.mean(radius)), 51.0, delta=0.30)
         self.assertEqual(cloud.metadata["radial_node_count"], 3)
 
-    def test_radial_cutoff_is_true_high_probability_quantile(self) -> None:
+    def test_radial_cutoff_approximation_against_analytic_one_s_tail(self) -> None:
         cloud = sample_orbital(QuantumNumbers(1, 0, 0), 1000, seed=71)
-        true_tail = float(gammaincc(3.0, 2.0 * cloud.bound_radius))
+        radius = cloud.bound_radius
+        true_tail = float(np.exp(-2.0 * radius) * (1.0 + 2.0 * radius + 2.0 * radius**2))
         self.assertAlmostEqual(true_tail, RADIAL_TAIL_PROBABILITY, delta=2e-12)
+        self.assertTrue(cloud.metadata["radial_tail_probability_is_estimate"])
+        self.assertIn("not an exact tail bound", cloud.metadata["radial_tail_probability_method"])
         self.assertGreaterEqual(cloud.metadata["radial_retained_probability"], 0.999999)
         second = sample_orbital(QuantumNumbers(1, 0, 0), 17, seed=999)
         self.assertEqual(cloud.bound_radius, second.bound_radius)

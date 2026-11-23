@@ -64,3 +64,13 @@ def preview_pose(seconds: float, duration: float) -> tuple[float, float, float]:
     elevation = 13.0 + 12.0 * math.sin(math.pi * orbit)
     cut_angle = 110.0 * cutaway
     return azimuth, elevation, cut_angle
+
+
+def flow_pose(seconds: float, duration: float) -> tuple[float, float]:
+    """Three stable views with two eased moves; particle flow continues throughout."""
+    scaled_time = seconds * 22.0 / duration
+    first_move = smoothstep((scaled_time - 5.0) / 3.0)
+    second_move = smoothstep((scaled_time - 13.0) / 3.0)
+    azimuth = 36.0 + 28.0 * first_move - 22.0 * second_move
+    elevation = 10.0 + 17.0 * first_move + 35.0 * second_move
+    return azimuth, elevation

@@ -7,9 +7,9 @@ from dataclasses import replace
 import glfw
 import moderngl
 
-from atom_simulator.physics import QuantumNumbers
+from atom_simulator.config import FLOW_CASES
+from atom_simulator.physics import PointCloud, QuantumNumbers, bohm_advance, sample_orbital
 from atom_simulator.renderer import OrbitalRenderer, RenderSettings
-from atom_simulator.sampling import PointCloud, sample_orbital
 
 
 class OrbitalViewer:
@@ -20,15 +20,24 @@ class OrbitalViewer:
         settings: RenderSettings,
         seed: int,
         test_frames: int = 0,
+        bohm_flow: bool = True,
+        time_rate: float = 4.0,
     ) -> None:
+        if not math.isfinite(time_rate) or time_rate <= 0.0:
+            raise ValueError("Time rate must be finite and positive.")
         self.state = state
         self.cloud = cloud
         self.settings = settings
         self.seed = seed
         self.test_frames = test_frames
+        self.bohm_flow = bohm_flow
+        self.flow_running = bohm_flow
+        self.time_rate = time_rate
+        self.physics_time = 0.0
         self.azimuth = 42.0
         self.elevation = 20.0
         self.distance = 3.0
+        self.minimum_distance = 2.5
         self.cut_angle = 110.0
         self.rotating = False
         self.dragging = False
@@ -44,7 +53,24 @@ class OrbitalViewer:
         if key == glfw.KEY_ESCAPE:
             glfw.set_window_should_close(window, True)
         elif key == glfw.KEY_SPACE:
+            self.flow_running = not self.flow_running
+        elif key == glfw.KEY_A:
             self.rotating = not self.rotating
+        elif key == glfw.KEY_F:
+            current_positions = self.cloud.positions
+            if self.bohm_flow:
+                current_positions = bohm_advance(self.state, current_positions, self.physics_time)
+            self.state = QuantumNumbers(self.state.n, self.state.l, -self.state.m)
+            metadata = self.cloud.metadata.copy()
+            metadata["state"] = {
+                "n": self.state.n,
+                "l": self.state.l,
+                "m": self.state.m,
+                "label": self.state.label,
+            }
+            self.cloud = PointCloud(current_positions, self.cloud.bound_radius, metadata)
+            self.physics_time = 0.0
+            self.needs_rebuild = True
         elif key == glfw.KEY_C:
             self.cut_angle = 0.0 if self.cut_angle > 0.0 else 110.0
         elif key == glfw.KEY_B:
@@ -55,15 +81,19 @@ class OrbitalViewer:
             self.azimuth = 42.0
             self.elevation = 20.0
             self.distance = 3.0
+            self.minimum_distance = 2.5
+            self.physics_time = 0.0
         elif glfw.KEY_1 <= key <= glfw.KEY_4:
-            presets = (
-                QuantumNumbers(1, 0, 0),
-                QuantumNumbers(2, 1, 0),
-                QuantumNumbers(3, 2, 0),
-                QuantumNumbers(6, 2, 0),
-            )
-            self.state = presets[key - glfw.KEY_1]
+            case_index = key - glfw.KEY_1
+            if case_index >= len(FLOW_CASES):
+                return
+            case = FLOW_CASES[case_index]
+            self.state = case.state
             self.cloud = sample_orbital(self.state, len(self.cloud.positions), self.seed)
+            self.time_rate = case.time_rate
+            self.distance = case.camera_distance
+            self.minimum_distance = min(2.5, case.camera_distance)
+            self.physics_time = 0.0
             self.needs_rebuild = True
 
     def on_mouse_button(self, window: object, button: int, action: int, modifiers: int) -> None:
@@ -81,7 +111,7 @@ class OrbitalViewer:
 
     def on_scroll(self, window: object, x_offset: float, y_offset: float) -> None:
         new_distance = self.distance * math.exp(-0.08 * y_offset)
-        self.distance = min(10.0, max(2.5, new_distance))
+        self.distance = min(10.0, max(self.minimum_distance, new_distance))
 
     def rebuild_renderer(self) -> None:
         if self.renderer is not None:
@@ -89,6 +119,8 @@ class OrbitalViewer:
         if self.context is None:
             raise RuntimeError("Cannot render without a current OpenGL context.")
         self.renderer = OrbitalRenderer(self.context, self.cloud, self.state, self.settings)
+        if self.bohm_flow:
+            self.renderer.enable_flow(self.time_rate)
         self.needs_rebuild = False
 
     def run(self) -> None:
@@ -102,7 +134,7 @@ class OrbitalViewer:
             glfw.window_hint(glfw.RESIZABLE, glfw.FALSE)
             if self.test_frames > 0:
                 glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
-            title = "atom-simulator | Drag: orbit | Wheel: zoom | C: cut | Space: rotate | 1-4"
+            title = "atom-simulator | Space: flow | A: camera | C: cut | F: reverse | 1-4: cases"
             self.window = glfw.create_window(
                 self.settings.width, self.settings.height, title, None, None
             )
@@ -143,6 +175,10 @@ class OrbitalViewer:
                 self.azimuth += elapsed * 4.0
             if self.renderer is None or self.context is None:
                 raise RuntimeError("Renderer lost its OpenGL context.")
+            if self.flow_running:
+                self.physics_time += elapsed * self.time_rate
+            if self.bohm_flow:
+                self.renderer.update_flow(self.physics_time)
             self.renderer.draw(self.azimuth, self.elevation, self.distance, self.cut_angle)
             self.context.copy_framebuffer(self.context.screen, self.renderer.output_buffer)
             glfw.swap_buffers(self.window)

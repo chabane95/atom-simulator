@@ -4,24 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atom-simulator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Physically sampled hydrogen orbitals with a GPU point-cloud renderer."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "numpy>=2.0,<3",
-    "scipy>=1.15,<2",
     "moderngl>=5.12,<6",
-    "glfw>=2.8,<3",
     "Pillow>=11,<13",
-    "av>=14,<19",
 ]
 
 [project.scripts]
 atom-simulator = "atom_simulator.cli:main"
 
 [project.optional-dependencies]
-dev = ["ruff>=0.9,<1"]
+video = ["av>=14,<19"]
+viewer = ["glfw>=2.8,<3"]
+all = ["av>=14,<19", "glfw>=2.8,<3"]
+dev = ["ruff>=0.9,<1", "av>=14,<19", "glfw>=2.8,<3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -35,4 +35,3 @@ select = ["E", "F", "I", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/atom_simulator/physics.py" = ["E741"]
-"src/atom_simulator/sampling.py" = ["E741"]

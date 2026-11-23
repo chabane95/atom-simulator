@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('view', 'image', 'render')]
+    [ValidateSet('view', 'image', 'render', 'clips', 'gallery')]
     [string]$Mode = 'view'
 )
 
@@ -11,7 +11,7 @@ try {
         Write-Host 'Python-Umgebung wird eingerichtet ...'
         python -m venv .venv
         if ($LASTEXITCODE -ne 0) { throw 'Python 3.11 oder neuer wird benoetigt.' }
-        & $projectPython -m pip install -e .
+        & $projectPython -m pip install -e '.[all]'
         if ($LASTEXITCODE -ne 0) { throw 'Die Abhaengigkeiten konnten nicht installiert werden.' }
     }
     & $projectPython -m atom_simulator $Mode

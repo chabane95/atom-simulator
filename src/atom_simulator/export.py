@@ -1,20 +1,26 @@
 """Still and MP4 export through the same renderer used by the interactive viewer."""
 
+from __future__ import annotations
+
 import json
+import math
 from dataclasses import asdict, replace
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
-import av
 import moderngl
 import numpy as np
 from PIL import Image
 
-from atom_simulator.camera import preview_pose
-from atom_simulator.physics import QuantumNumbers
+from atom_simulator.camera import flow_pose, preview_pose
+from atom_simulator.physics import T_MU_SECONDS, PointCloud, QuantumNumbers, bohm_angular_velocity
 from atom_simulator.renderer import OrbitalRenderer, RenderSettings
-from atom_simulator.sampling import PointCloud
+
+try:
+    import av
+except ImportError:
+    av = None
 
 
 def write_metadata(
@@ -24,15 +30,16 @@ def write_metadata(
     renderer: OrbitalRenderer,
     details: dict[str, Any],
 ) -> None:
+    interpretation = "Fixed samples of |R_nl Y_lm|^2; camera motion."
+    if details.get("bohm_flow", False):
+        interpretation = "Spinless Bohmian ensemble in the relative coordinate; not many electrons."
     record = {
         "quantum_numbers": asdict(state),
         "sampling": cloud.metadata,
         "render_settings": asdict(renderer.settings),
         "renderer": renderer.context.info["GL_RENDERER"],
         "display_radius_in_a_mu": renderer.display_radius,
-        "interpretation": (
-            "Fixed samples of |R_nl Y_lm|^2; camera motion, no particle trajectories."
-        ),
+        "interpretation": interpretation,
         "cutaway": "A geometric azimuth wedge; its opening changes visibility, not the state.",
         "export": details,
     }
@@ -112,7 +119,16 @@ def render_video(
     fps: int,
     cutaway: bool = True,
     supersample: int = 2,
+    bohm_flow: bool = False,
+    time_rate: float = 4.0,
+    camera_distance: float = 3.0,
 ) -> None:
+    if av is None:
+        raise RuntimeError('Video export needs the optional encoder: pip install -e ".[video]"')
+    if not math.isfinite(time_rate) or time_rate <= 0.0:
+        raise ValueError("Time rate must be finite and positive.")
+    if not math.isfinite(camera_distance) or not 1.5 <= camera_distance <= 10.0:
+        raise ValueError("Camera distance must be between 1.5 and 10.")
     if output.suffix.lower() != ".mp4":
         raise ValueError("Video output must use the .mp4 extension.")
     if supersample not in (1, 2, 3):
@@ -135,6 +151,24 @@ def render_video(
             settings, width=settings.width * supersample, height=settings.height * supersample
         )
         renderer = OrbitalRenderer(context, cloud, state, render_settings)
+        flow_diagnostics = {}
+        if bohm_flow:
+            renderer.enable_flow(time_rate, fps)
+            angular_rates = bohm_angular_velocity(state, cloud.positions)
+            frame_angles = np.abs(angular_rates) * time_rate / fps
+            flow_diagnostics = {
+                "time_units_per_video_second": time_rate,
+                "natural_time_seconds": T_MU_SECONDS,
+                "physical_seconds_per_video_second": time_rate * T_MU_SECONDS,
+                "max_angle_per_frame_radians": float(frame_angles.max()),
+                "fraction_over_pi_per_frame": float(np.mean(frame_angles > np.pi)),
+                "fraction_over_0_25_radians_per_frame": float(np.mean(frame_angles > 0.25)),
+                "highlighted_samples": renderer.tracer_indices.tolist(),
+                "highlight_max_angle_per_frame": float(
+                    frame_angles[renderer.tracer_indices].max(initial=0.0)
+                ),
+                "trajectory_solver": "Exact azimuthal solution; one time scale; no speed caps.",
+            }
         container = av.open(str(temporary), "w", options={"movflags": "+faststart"})
         stream = container.add_stream("libx264", rate=fps)
         stream.width = settings.width
@@ -145,10 +179,17 @@ def render_video(
 
         for frame_index in range(total_frames):
             seconds = frame_index / fps
-            azimuth, elevation, cut_angle = preview_pose(seconds, duration)
+            if bohm_flow:
+                renderer.update_flow(seconds * time_rate)
+                azimuth, elevation = flow_pose(seconds, duration)
+                cut_angle = 110.0
+            else:
+                azimuth, elevation, cut_angle = preview_pose(seconds, duration)
             if not cutaway:
                 cut_angle = 0.0
-            renderer.draw(azimuth=azimuth, elevation=elevation, cut_angle=cut_angle)
+            renderer.draw(
+                azimuth=azimuth, elevation=elevation, distance=camera_distance, cut_angle=cut_angle
+            )
             image = renderer.read_image().resize(
                 (settings.width, settings.height), Image.Resampling.LANCZOS
             )
@@ -174,7 +215,10 @@ def render_video(
                 "height": settings.height,
                 "supersample": supersample,
                 "cutaway_enabled": cutaway,
-                "camera": "Slow orbit; fixed particle positions; final hold.",
+                "camera": "Three held views with two smooth moves." if bohm_flow else "Slow orbit.",
+                "bohm_flow": bohm_flow,
+                "camera_distance": camera_distance,
+                "flow": flow_diagnostics,
             },
         )
     finally:
@@ -183,3 +227,82 @@ def render_video(
         if renderer is not None:
             renderer.close()
         context.release()
+
+
+def append_clip(
+    output_container: Any, output_stream: Any, path: Path, first_frame: int, fps: int
+) -> int:
+    """Decode one clip in order; keep the outer sequence loop separate and readable."""
+    frame_index = first_frame
+    with av.open(str(path)) as source:
+        for frame in source.decode(video=0):
+            encode_frame(output_container, output_stream, frame.to_image(), frame_index, fps)
+            frame_index += 1
+    return frame_index
+
+
+def combine_clips(paths: list[Path], output: Path, width: int, height: int, fps: int) -> None:
+    """A clean sequence of the individually usable clips, without sound or extra titles."""
+    if av is None:
+        raise RuntimeError("The optional video encoder is not installed.")
+    temporary = output.with_name(output.stem + ".partial.mp4")
+    with av.open(str(temporary), "w", options={"movflags": "+faststart"}) as container:
+        stream = container.add_stream("libx264", rate=fps)
+        stream.width = width
+        stream.height = height
+        stream.pix_fmt = "yuv420p"
+        stream.options = {"crf": "18", "preset": "medium"}
+        frame_index = 0
+        chapters = []
+        for path in paths:
+            chapters.append({"file": path.name, "start_seconds": frame_index / fps})
+            frame_index = append_clip(container, stream, path, frame_index, fps)
+        flush_encoder(container, stream)
+    temporary.replace(output)
+    metadata = {
+        "frames": frame_index,
+        "fps": fps,
+        "duration_seconds": frame_index / fps,
+        "width": width,
+        "height": height,
+        "chapters": chapters,
+    }
+    output.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+
+
+def render_cases(output: Path) -> None:
+    """The four explicit production cases from config.py, followed by their combined clip."""
+    from atom_simulator.config import (
+        BACKGROUND,
+        BEAD_RADIUS,
+        CLIP_SECONDS,
+        FLOW_CASES,
+        FPS,
+        HEIGHT,
+        PARTICLE_COUNT,
+        RANDOM_SEED,
+        WIDTH,
+    )
+    from atom_simulator.physics import sample_orbital
+
+    output.mkdir(parents=True, exist_ok=True)
+    settings = RenderSettings(
+        width=WIDTH, height=HEIGHT, bead_radius=BEAD_RADIUS, background=BACKGROUND
+    )
+    paths = []
+    for case in FLOW_CASES:
+        target = output / (case.filename + ".mp4")
+        cloud = sample_orbital(case.state, PARTICLE_COUNT, RANDOM_SEED)
+        render_video(
+            case.state,
+            cloud,
+            settings,
+            target,
+            CLIP_SECONDS,
+            FPS,
+            bohm_flow=True,
+            time_rate=case.time_rate,
+            camera_distance=case.camera_distance,
+        )
+        paths.append(target)
+    combine_clips(paths, output / "Bohmscher_Fluss_Alle_Faelle.mp4", WIDTH, HEIGHT, FPS)

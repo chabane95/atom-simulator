@@ -1,24 +1,22 @@
 """Scientific checks independent of the renderer and CLI."""
 
+import math
 import unittest
 
 import numpy as np
-from scipy.integrate import quad
 
 from atom_simulator.physics import (
     QuantumNumbers,
     angular_wavefunction,
+    associated_legendre,
     density,
+    generalized_laguerre,
     polar_probability_density,
     radial_nodes,
     radial_probability_density,
     radial_wavefunction,
     wavefunction,
 )
-
-
-def radial_moment_integrand(radius: float, state: QuantumNumbers, power: int) -> float:
-    return float(radius**power * radial_probability_density(state, radius))
 
 
 class QuantumNumberTests(unittest.TestCase):
@@ -43,6 +41,18 @@ class QuantumNumberTests(unittest.TestCase):
 
 
 class WavefunctionTests(unittest.TestCase):
+    def test_laguerre_recurrence_against_explicit_cubic(self) -> None:
+        coordinate = np.array([0.0, 0.5, 2.0, 5.0, 12.0, 30.0])
+        expected = (-(coordinate**3) + 24.0 * coordinate**2 - 168.0 * coordinate + 336.0) / 6.0
+        np.testing.assert_allclose(generalized_laguerre(3, 5.0, coordinate), expected, rtol=2e-14)
+
+    def test_associated_legendre_recurrence_and_condon_shortley_phase(self) -> None:
+        coordinate = np.linspace(-1.0, 1.0, 101)
+        expected_p21 = -3.0 * coordinate * np.sqrt(1.0 - coordinate**2)
+        expected_p30 = 0.5 * (5.0 * coordinate**3 - 3.0 * coordinate)
+        np.testing.assert_allclose(associated_legendre(2, 1, coordinate), expected_p21, atol=2e-15)
+        np.testing.assert_allclose(associated_legendre(3, 0, coordinate), expected_p30, atol=2e-15)
+
     def test_analytic_1s_radial_function(self) -> None:
         radius = np.array([0.0, 0.1, 0.7, 1.0, 3.0, 10.0])
         expected = 2.0 * np.exp(-radius)
@@ -98,11 +108,12 @@ class WavefunctionTests(unittest.TestCase):
         ]
         for state in states:
             with self.subTest(state=state):
-                normalization = quad(
-                    radial_moment_integrand, 0.0, np.inf, args=(state, 0), epsabs=1e-10
-                )[0]
-                first = quad(radial_moment_integrand, 0.0, np.inf, args=(state, 1), epsabs=1e-9)[0]
-                second = quad(radial_moment_integrand, 0.0, np.inf, args=(state, 2), epsabs=1e-8)[0]
+                integration_limit = 4.0 * state.n**2 + 20.0 * state.n
+                radius = np.linspace(0.0, integration_limit, 262145)
+                probability = radial_probability_density(state, radius)
+                normalization = np.trapezoid(probability, radius)
+                first = np.trapezoid(radius * probability, radius)
+                second = np.trapezoid(radius**2 * probability, radius)
                 expected_first = (3 * state.n**2 - state.l * (state.l + 1)) / 2.0
                 expected_second = (
                     state.n**2 * (5 * state.n**2 + 1 - 3 * state.l * (state.l + 1)) / 2.0
@@ -157,6 +168,16 @@ class WavefunctionTests(unittest.TestCase):
                 right = radial_wavefunction(state, nodes + offset)
                 self.assertTrue(np.all(left * right < 0.0))
                 np.testing.assert_allclose(radial_wavefunction(state, nodes), 0.0, atol=2e-15)
+
+    def test_degree_eleven_roots_obey_independent_viete_identities(self) -> None:
+        state = QuantumNumbers(12, 0, 0)
+        scaled_roots = radial_nodes(state) * (2.0 / state.n)
+        degree = state.radial_node_count
+        alpha = 2 * state.l + 1
+        expected_sum = degree * (degree + alpha)
+        expected_product = math.factorial(degree + alpha) / math.factorial(alpha)
+        self.assertAlmostEqual(float(np.sum(scaled_roots)), expected_sum, delta=2e-11)
+        self.assertAlmostEqual(float(np.prod(scaled_roots)) / expected_product, 1.0, delta=2e-12)
 
     def test_angular_node_of_default_d_state(self) -> None:
         theta = np.arccos(1.0 / np.sqrt(3.0))
