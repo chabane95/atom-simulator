@@ -1,0 +1,54 @@
+{
+  "quantum_numbers": {
+    "n": 6,
+    "l": 2,
+    "m": 0
+  },
+  "sampling": {
+    "state": {
+      "n": 6,
+      "l": 2,
+      "m": 0,
+      "label": "n=6, l=2, m=0"
+    },
+    "count": 450000,
+    "seed": 7,
+    "position_unit": "a_mu",
+    "angular_basis": "normalized complex spherical harmonics",
+    "radial_node_count": 3,
+    "radial_nodes_a_mu": [
+      10.429186528440171,
+      21.960738680260903,
+      39.61007479129893
+    ],
+    "sampler": "independent inverse CDF: r, cos(theta), uniform phi",
+    "radial_bound_a_mu": 148.813483922096,
+    "radial_tail_probability": 9.999999999999964e-09,
+    "radial_retained_probability": 0.99999999,
+    "radial_grid_integral": 0.9999999899989352,
+    "radial_grid_points": 65540,
+    "radial_inverse_cdf_points": 65540,
+    "polar_grid_integral": 1.0000000005820728,
+    "polar_grid_points": 131075,
+    "polar_inverse_cdf_points": 131075,
+    "probability_interpretation": "|psi|^2 conditioned on the stated radial cutoff"
+  },
+  "render_settings": {
+    "width": 3840,
+    "height": 2160,
+    "bead_radius": 0.0035,
+    "background": "light",
+    "labels": true
+  },
+  "renderer": "NVIDIA GeForce RTX 4070 SUPER/PCIe/SSE2",
+  "display_radius_in_a_mu": 148.813483922096,
+  "interpretation": "Fixed samples of |R_nl Y_lm|^2; camera motion, no particle trajectories.",
+  "cutaway": "A geometric azimuth wedge; its opening changes visibility, not the state.",
+  "export": {
+    "kind": "still",
+    "cut_angle_degrees": 110.0,
+    "width": 1920,
+    "height": 1080,
+    "supersample": 2
+  }
+}

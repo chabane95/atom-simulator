@@ -1,0 +1,9 @@
+# Versions used for the Windows / Python 3.11 reference render.
+# Install this file, then: python -m pip install -e . --no-deps
+numpy==2.4.6
+scipy==1.17.1
+moderngl==5.13.0
+glcontext==3.1.0
+glfw==2.11.0
+Pillow==12.3.0
+av==18.1.1
